@@ -1,0 +1,279 @@
+{
+  "name": "Tokenized Multi-Stage Approval Chain",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "proposal/submit",
+        "responseMode": "lastNode"
+      },
+      "name": "Webhook: Proposal Submitted",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        0
+      ],
+      "webhookId": "REPLACE_ME"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into proposals (title, payload, created_by) values ($1,$2,$3) returning id;"
+      },
+      "name": "Create Proposal",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into approval_stages (proposal_id, stage_number, approver_email) select $1, s.n, s.email from jsonb_to_recordset($2::jsonb) as s(n int, email text) returning id, stage_number;"
+      },
+      "name": "Create Stages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -180,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select mint_approval_token($1) as token;"
+      },
+      "name": "Mint Stage Token",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        40,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.approver_email }}",
+        "subject": "Approval needed: {{ $json.title }}",
+        "message": "={{ $env.APP_BASE_URL }}/approve/{{ $json.token }}\n\nThis link is single use and expires in 14 days."
+      },
+      "name": "Email Approver",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "approve/:token",
+        "responseMode": "lastNode"
+      },
+      "name": "Webhook: Confirm Page (GET)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        240
+      ],
+      "webhookId": "REPLACE_ME_2"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select p.title, p.payload, s.stage_number from approval_tokens t join approval_stages s on s.id = t.stage_id join proposals p on p.id = s.proposal_id where t.token_hash = encode(digest($1,'sha256'),'hex') and t.consumed_at is null and t.expires_at > now();"
+      },
+      "name": "Load For Confirmation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -400,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "approve/:token/commit",
+        "responseMode": "lastNode"
+      },
+      "name": "Webhook: Commit Decision (POST)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        460
+      ],
+      "webhookId": "REPLACE_ME_3"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from consume_approval_token($1, $2::approval_status, $3);"
+      },
+      "name": "Consume Token",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -400,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "value2": "approved"
+            }
+          ]
+        }
+      },
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -180,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select mint_approval_token(id) as token, approver_email from approval_stages where proposal_id = $1 and stage_number = $2;"
+      },
+      "name": "Mint Next Stage",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        60,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.requester_email }}",
+        "subject": "Proposal rejected",
+        "message": "=Reason: {{ $json.reason }}"
+      },
+      "name": "Notify Rejection",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        60,
+        560
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: Proposal Submitted": {
+      "main": [
+        [
+          {
+            "node": "Create Proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Proposal": {
+      "main": [
+        [
+          {
+            "node": "Create Stages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Stages": {
+      "main": [
+        [
+          {
+            "node": "Mint Stage Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mint Stage Token": {
+      "main": [
+        [
+          {
+            "node": "Email Approver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Confirm Page (GET)": {
+      "main": [
+        [
+          {
+            "node": "Load For Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Commit Decision (POST)": {
+      "main": [
+        [
+          {
+            "node": "Consume Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consume Token": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Mint Next Stage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    "approvals",
+    "pattern"
+  ]
+}
