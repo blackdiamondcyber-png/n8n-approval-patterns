@@ -80,6 +80,31 @@ proposal to its final approved state, and that a rejected single-stage
 proposal sends the rejection notice. Everything is checked against the
 database and mailpit, not against the webhook's own response body.
 
+### What running it found
+
+Until this job existed, the workflow file had only the parse check behind it.
+The first real run found eight problems, none of which a parse check can see:
+
+- None of the six Postgres nodes bound their `$1` parameters, so every query
+  failed.
+- Both email nodes used field names this node version does not have, and had
+  no sender address.
+- The IF node used the old condition format under its newer type version.
+- A token was minted for every stage at submission, which is the mistake the
+  first note below warns against. Only stage 1 is minted now.
+- The next stage's token was minted but never emailed.
+- The rejection email read a field no table has.
+- A `:token` segment in the middle of a webhook path does not route in n8n
+  without the node's id in front of it, so both approval links returned 404.
+  The token now travels as a query parameter; it is still only a lookup key.
+- Approving the final stage returned HTTP 500, because the last node had no
+  item to respond with.
+
+One rough edge is left on purpose: a replayed token is answered with HTTP 500,
+because the database function raises. The job checks that nothing changes when
+that happens, but a real deployment should catch it and show a plain "this link
+has already been used" page.
+
 ## Importing the workflow
 
 n8n -> Workflows -> Import from File -> `workflow/approval-chain.json`.
