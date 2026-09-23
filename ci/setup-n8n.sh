@@ -92,12 +92,15 @@ fi
 # BEFORE ActiveWorkflowManager finishes registering the active workflow's
 # webhooks at boot. A request in that window gets a 404 "is not registered"
 # even though the workflow is active, so poll the real webhook (a harmless
-# no-op proposal with zero stages) until that race is over.
+# no-op proposal, structurally identical to a real one) until that race is
+# over. A zero-stage payload was tried first but a stage-less proposal
+# leaves "Mint Stage Token" with no id to bind, which is a real error, not
+# a registration race, so this uses one throwaway stage instead.
 echo "== Waiting for the workflow's webhooks to finish registering =="
 for i in $(seq 1 30); do
   code=$(curl -s -o /tmp/warmup_resp.json -w '%{http_code}' -X POST "http://localhost:5678/webhook/proposal/submit" \
     -H 'Content-Type: application/json' \
-    -d '{"title":"ci-warmup","payload":{},"created_by":"00000000-0000-0000-0000-000000000000","stages":[]}' || true)
+    -d '{"title":"ci-warmup","payload":{},"created_by":"00000000-0000-0000-0000-000000000000","stages":[{"n":1,"email":"ci-warmup@example.test"}]}' || true)
   if [ "$code" = "200" ]; then
     echo "webhooks are registered after ${i} attempt(s)"
     exit 0
