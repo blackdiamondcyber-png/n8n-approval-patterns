@@ -87,8 +87,9 @@ history.
 idea why, and the requester emails you anyway. The whole point was removing
 that email.
 
-**Send a digest, not a nag.** One reminder at 72 hours moved more approvals
-than daily emails did, and people stopped filtering the sender.
+**Send a digest, not a nag.** In my deployment, one reminder at 72 hours moved
+more approvals than daily emails had, and people stopped filtering the sender.
+That is what I saw with one team, not a measured result.
 
 ## License
 
