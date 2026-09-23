@@ -95,16 +95,18 @@ fi
 # no-op proposal with zero stages) until that race is over.
 echo "== Waiting for the workflow's webhooks to finish registering =="
 for i in $(seq 1 30); do
-  resp=$(curl -s -X POST "http://localhost:5678/webhook/proposal/submit" \
+  code=$(curl -s -o /tmp/warmup_resp.json -w '%{http_code}' -X POST "http://localhost:5678/webhook/proposal/submit" \
     -H 'Content-Type: application/json' \
-    -d '{"title":"ci-warmup","payload":{},"created_by":"00000000-0000-0000-0000-000000000000","stages":[]}')
-  if ! printf '%s' "$resp" | grep -q "is not registered"; then
+    -d '{"title":"ci-warmup","payload":{},"created_by":"00000000-0000-0000-0000-000000000000","stages":[]}' || true)
+  if [ "$code" = "200" ]; then
     echo "webhooks are registered after ${i} attempt(s)"
     exit 0
   fi
+  echo "attempt ${i}: HTTP ${code:-<none>}"
   sleep 1
 done
 
 echo "the proposal/submit webhook never finished registering"
+cat /tmp/warmup_resp.json 2>/dev/null || true
 docker logs n8n-e2e || true
 exit 1
