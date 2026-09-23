@@ -24,9 +24,9 @@ fail() {
   exit 1
 }
 
-# extract a 64-char hex token from an /approve/<token> link in email text
+# extract a 64-char hex token from an /approve?token=<token> link in email text
 extract_token() {
-  grep -oE '/approve/[a-f0-9]{64}' | head -1 | sed 's#/approve/##'
+  grep -oE 'token=[a-f0-9]{64}' | head -1 | sed 's#token=##'
 }
 
 message_id_for() {
@@ -106,8 +106,8 @@ fi
 ok "approver B has not been emailed yet"
 
 # (d) GET the confirm webhook with that token; assert it is NOT consumed afterwards
-http_code=$(curl -s -o /tmp/confirm_resp.json -w '%{http_code}' "$N8N_URL/webhook/approve/${TOKEN}")
-[ "$http_code" = "200" ] || { cat /tmp/confirm_resp.json >&2; fail "GET approve/:token returned HTTP $http_code, expected 200"; }
+http_code=$(curl -s -o /tmp/confirm_resp.json -w '%{http_code}' "$N8N_URL/webhook/approve?token=${TOKEN}")
+[ "$http_code" = "200" ] || { cat /tmp/confirm_resp.json >&2; fail "GET approve returned HTTP $http_code, expected 200"; }
 ok "GET confirm page returned HTTP 200"
 
 STILL_UNCONSUMED=$($PSQL -c "select (consumed_at is null) from approval_tokens where token_hash = encode(digest('${TOKEN}','sha256'),'hex');")
@@ -118,10 +118,10 @@ ok "token is still unconsumed after the GET confirm page (link scanners cannot a
 # an audit row, and that a second token was minted and a second email sent to approver B
 commit_body='{"decision":"approved","reason":"looks good"}'
 http_code=$(curl -s -o /tmp/commit1_resp.json -w '%{http_code}' \
-  -X POST "$N8N_URL/webhook/approve/${TOKEN}/commit" \
+  -X POST "$N8N_URL/webhook/approve/commit?token=${TOKEN}" \
   -H 'Content-Type: application/json' \
   -d "$commit_body")
-[ "$http_code" = "200" ] || { cat /tmp/commit1_resp.json >&2; fail "POST approve/:token/commit (stage 1 approve) returned HTTP $http_code, expected 200"; }
+[ "$http_code" = "200" ] || { cat /tmp/commit1_resp.json >&2; fail "POST approve/commit (stage 1 approve) returned HTTP $http_code, expected 200"; }
 ok "POST commit-decision (stage 1 approve) returned HTTP 200"
 
 STAGE1_STATUS=$($PSQL -c "select status from approval_stages where proposal_id = '${PROPOSAL_ID}' and stage_number = 1;")
@@ -147,7 +147,7 @@ ok "extracted a distinct 64-char stage-2 token from approver B's email"
 
 # (f) replay the stage-1 token; assert it is rejected and nothing changes
 http_code=$(curl -s -o /tmp/replay_resp.json -w '%{http_code}' \
-  -X POST "$N8N_URL/webhook/approve/${TOKEN}/commit" \
+  -X POST "$N8N_URL/webhook/approve/commit?token=${TOKEN}" \
   -H 'Content-Type: application/json' \
   -d '{"decision":"approved","reason":"replay attempt"}')
 [ "$http_code" -ge 400 ] || fail "replaying the consumed stage-1 token should fail, got HTTP $http_code"
@@ -159,10 +159,10 @@ ok "replay did not add another audit row or change stage-1 state"
 
 # (g) approve stage 2; assert the final state the schema defines
 http_code=$(curl -s -o /tmp/commit2_resp.json -w '%{http_code}' \
-  -X POST "$N8N_URL/webhook/approve/${TOKEN2}/commit" \
+  -X POST "$N8N_URL/webhook/approve/commit?token=${TOKEN2}" \
   -H 'Content-Type: application/json' \
   -d '{"decision":"approved","reason":"final sign-off"}')
-[ "$http_code" = "200" ] || { cat /tmp/commit2_resp.json >&2; fail "POST approve/:token/commit (stage 2 approve) returned HTTP $http_code, expected 200"; }
+[ "$http_code" = "200" ] || { cat /tmp/commit2_resp.json >&2; fail "POST approve/commit (stage 2 approve) returned HTTP $http_code, expected 200"; }
 ok "POST commit-decision (stage 2 approve) returned HTTP 200"
 
 FINAL_STATUS=$($PSQL -c "select status from proposals where id = '${PROPOSAL_ID}';")
@@ -203,10 +203,10 @@ TOKEN3=$(printf '%s' "$MSG3_TEXT" | extract_token)
 ok "extracted the token for the single-stage reject scenario"
 
 http_code=$(curl -s -o /tmp/reject_resp.json -w '%{http_code}' \
-  -X POST "$N8N_URL/webhook/approve/${TOKEN3}/commit" \
+  -X POST "$N8N_URL/webhook/approve/commit?token=${TOKEN3}" \
   -H 'Content-Type: application/json' \
   -d '{"decision":"rejected","reason":"budget too high"}')
-[ "$http_code" = "200" ] || { cat /tmp/reject_resp.json >&2; fail "POST approve/:token/commit (reject) returned HTTP $http_code, expected 200"; }
+[ "$http_code" = "200" ] || { cat /tmp/reject_resp.json >&2; fail "POST approve/commit (reject) returned HTTP $http_code, expected 200"; }
 ok "POST commit-decision (reject) returned HTTP 200"
 
 STAGE3_STATUS=$($PSQL -c "select status from approval_stages where proposal_id = '${PROPOSAL2_ID}' and stage_number = 1;")

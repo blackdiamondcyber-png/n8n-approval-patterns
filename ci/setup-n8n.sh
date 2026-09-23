@@ -115,10 +115,10 @@ for i in $(seq 1 30); do
     -d '{"title":"ci-warmup","payload":{},"created_by":"00000000-0000-0000-0000-000000000000","stages":[{"n":1,"email":"ci-warmup@example.test"}]}' \
     || ready=false
 
-  route_is_registered "http://localhost:5678/webhook/approve/ci-warmup-token" \
+  route_is_registered "http://localhost:5678/webhook/approve?token=ci-warmup-token" \
     || ready=false
 
-  route_is_registered -X POST "http://localhost:5678/webhook/approve/ci-warmup-token/commit" \
+  route_is_registered -X POST "http://localhost:5678/webhook/approve/commit?token=ci-warmup-token" \
     -H 'Content-Type: application/json' \
     -d '{"decision":"approved","reason":"warmup"}' \
     || ready=false
