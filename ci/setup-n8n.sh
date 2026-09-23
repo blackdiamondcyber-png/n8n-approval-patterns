@@ -89,22 +89,21 @@ if [ "$healthy" != "true" ]; then
 fi
 
 # /healthz turns green as soon as the HTTP listener is bound, which is
-# BEFORE ActiveWorkflowManager finishes registering the active workflow's
-# webhooks at boot. A request in that window gets a 404 "is not registered"
-# even though the workflow is active. Registering the three webhook trigger
-# nodes is not one atomic step either (the POST proposal/submit route came
-# up before the other two in an earlier run), so probe all three routes and
-# only proceed once none of them report "is not registered" any more. A
-# bogus token still exercises real routing; the resulting business error
-# (invalid token, no matching row) is expected and is not this check's
-# concern.
+# BEFORE n8n's Express app has the webhook sub-router mounted, and BEFORE
+# ActiveWorkflowManager has registered the workflow's own webhooks on top
+# of that. Both gaps show up as a 404: the earliest requests get Express's
+# own generic "Cannot POST ..." page (no router mounted yet at all), the
+# next batch get n8n's own JSON "is not registered" (router mounted, this
+# workflow's routes not added yet). Matching on that JSON string alone
+# treated the first, earlier 404 as a false "ready", so check the bare
+# HTTP status instead: n8n never answers a real hit on a registered route
+# with 404, only with a real business outcome (200, or 500 for something
+# like this probe's bogus token), so status 404 in any form means "keep
+# waiting" and anything else means the route exists.
 route_is_registered() {
-  local response
-  response=$(curl -s --max-time 5 "$@" 2>/dev/null) || return 1
-  if printf '%s' "$response" | grep -q "is not registered"; then
-    return 1
-  fi
-  return 0
+  local code
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$@" 2>/dev/null) || return 1
+  [ "$code" != "404" ]
 }
 
 echo "== Waiting for all three webhooks to finish registering =="
