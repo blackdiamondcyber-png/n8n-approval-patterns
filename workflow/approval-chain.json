@@ -10,64 +10,61 @@
       "name": "Webhook: Proposal Submitted",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        -620,
-        0
-      ],
+      "position": [-620, 0],
       "webhookId": "REPLACE_ME"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "insert into proposals (title, payload, created_by) values ($1,$2,$3) returning id;"
+        "query": "insert into proposals (title, payload, created_by) values ($1,$2,$3) returning id, title;",
+        "options": {
+          "queryReplacement": "={{ $json.body.title }},{{ JSON.stringify($json.body.payload || {}) }},{{ $json.body.created_by }}"
+        }
       },
       "name": "Create Proposal",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [
-        -400,
-        0
-      ]
+      "position": [-400, 0]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "insert into approval_stages (proposal_id, stage_number, approver_email) select $1, s.n, s.email from jsonb_to_recordset($2::jsonb) as s(n int, email text) returning id, stage_number;"
+        "query": "insert into approval_stages (proposal_id, stage_number, approver_email) select $1, s.n, s.email from jsonb_to_recordset($2::jsonb) as s(n int, email text) returning id, stage_number;",
+        "options": {
+          "queryReplacement": "={{ $json.id }},{{ JSON.stringify($('Webhook: Proposal Submitted').item.json.body.stages) }}"
+        }
       },
       "name": "Create Stages",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [
-        -180,
-        0
-      ]
+      "position": [-180, 0]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select mint_approval_token($1) as token;"
+        "query": "select mint_approval_token(s.id) as token, s.approver_email, p.title from approval_stages s join proposals p on p.id = s.proposal_id where s.id = $1 and s.stage_number = 1;",
+        "options": {
+          "queryReplacement": "={{ $json.id }}"
+        }
       },
       "name": "Mint Stage Token",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [
-        40,
-        0
-      ]
+      "position": [40, 0]
     },
     {
       "parameters": {
-        "sendTo": "={{ $json.approver_email }}",
-        "subject": "Approval needed: {{ $json.title }}",
-        "message": "={{ $env.APP_BASE_URL }}/approve/{{ $json.token }}\n\nThis link is single use and expires in 14 days."
+        "fromEmail": "approvals@bd-cyber.test",
+        "toEmail": "={{ $json.approver_email }}",
+        "subject": "=Approval needed: {{ $json.title }}",
+        "emailFormat": "text",
+        "text": "={{ $env.APP_BASE_URL }}/approve/{{ $json.token }}\n\nThis link is single use and expires in 14 days.",
+        "options": {}
       },
       "name": "Email Approver",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [
-        260,
-        0
-      ]
+      "position": [260, 0]
     },
     {
       "parameters": {
@@ -78,24 +75,21 @@
       "name": "Webhook: Confirm Page (GET)",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        -620,
-        240
-      ],
+      "position": [-620, 240],
       "webhookId": "REPLACE_ME_2"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select p.title, p.payload, s.stage_number from approval_tokens t join approval_stages s on s.id = t.stage_id join proposals p on p.id = s.proposal_id where t.token_hash = encode(digest($1,'sha256'),'hex') and t.consumed_at is null and t.expires_at > now();"
+        "query": "select p.title, p.payload, s.stage_number from approval_tokens t join approval_stages s on s.id = t.stage_id join proposals p on p.id = s.proposal_id where t.token_hash = encode(digest($1,'sha256'),'hex') and t.consumed_at is null and t.expires_at > now();",
+        "options": {
+          "queryReplacement": "={{ $json.params.token }}"
+        }
       },
       "name": "Load For Confirmation",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [
-        -400,
-        240
-      ]
+      "position": [-400, 240]
     },
     {
       "parameters": {
@@ -106,70 +100,74 @@
       "name": "Webhook: Commit Decision (POST)",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        -620,
-        460
-      ],
+      "position": [-620, 460],
       "webhookId": "REPLACE_ME_3"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select * from consume_approval_token($1, $2::approval_status, $3);"
+        "query": "select * from consume_approval_token($1, $2::approval_status, $3);",
+        "options": {
+          "queryReplacement": "={{ $json.params.token }},{{ $json.body.decision }},{{ $json.body.reason || null }}"
+        }
       },
       "name": "Consume Token",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [
-        -400,
-        460
-      ]
+      "position": [-400, 460]
     },
     {
       "parameters": {
         "conditions": {
-          "string": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.status }}",
-              "value2": "approved"
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
       "name": "Approved?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        -180,
-        460
-      ]
+      "position": [-180, 460]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select mint_approval_token(id) as token, approver_email from approval_stages where proposal_id = $1 and stage_number = $2;"
+        "query": "select mint_approval_token(s.id) as token, s.approver_email, p.title from approval_stages s join proposals p on p.id = s.proposal_id where s.proposal_id = $1 and s.stage_number = $2;",
+        "options": {
+          "queryReplacement": "={{ $json.proposal_id }},{{ $json.stage_number + 1 }}"
+        }
       },
       "name": "Mint Next Stage",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [
-        60,
-        380
-      ]
+      "position": [60, 380]
     },
     {
       "parameters": {
-        "sendTo": "={{ $json.requester_email }}",
-        "subject": "Proposal rejected",
-        "message": "=Reason: {{ $json.reason }}"
+        "fromEmail": "approvals@bd-cyber.test",
+        "toEmail": "={{ $json.approver_email }}",
+        "subject": "=Proposal rejected: stage {{ $json.stage_number }}",
+        "emailFormat": "text",
+        "text": "=Reason: {{ $json.reason }}",
+        "options": {}
       },
       "name": "Notify Rejection",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [
-        60,
-        560
-      ]
+      "position": [60, 560]
     }
   ],
   "connections": {
@@ -267,13 +265,21 @@
           }
         ]
       ]
+    },
+    "Mint Next Stage": {
+      "main": [
+        [
+          {
+            "node": "Email Approver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1"
   },
-  "tags": [
-    "approvals",
-    "pattern"
-  ]
+  "tags": ["approvals", "pattern"]
 }

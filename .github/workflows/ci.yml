@@ -47,3 +47,46 @@ jobs:
             echo "expected 12 nodes in workflow/approval-chain.json, found $count"
             exit 1
           fi
+
+  workflow-e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      mailpit:
+        image: axllent/mailpit:latest
+        ports:
+          - 1025:1025
+          - 8025:8025
+
+    env:
+      PGPASSWORD: postgres
+      PSQL: psql -v ON_ERROR_STOP=1 -X -q -h localhost -U postgres -d postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load the tables, minting, and audit trigger
+        run: |
+          $PSQL -f sql/approvals.sql
+          $PSQL -f sql/audit.sql
+
+      - name: Import the workflow into a real n8n and activate it
+        run: bash ci/setup-n8n.sh
+
+      - name: Run the end-to-end assertions against the live webhooks
+        run: bash ci/e2e.sh
+
+      - name: Dump n8n container logs
+        if: always()
+        run: docker logs n8n-e2e || true

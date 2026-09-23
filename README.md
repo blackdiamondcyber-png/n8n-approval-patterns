@@ -52,15 +52,33 @@ Design decisions that matter:
 
 ## What is here
 
-| Path                           | Contents                                          |
-| ------------------------------ | ------------------------------------------------- |
-| `workflow/approval-chain.json` | n8n workflow, importable, 12 nodes                |
-| `sql/approvals.sql`            | Tables, token minting, and consumption            |
-| `sql/audit.sql`                | Append-only decision log. Run approvals.sql first |
-| `tests/approvals-tests.sql`    | Assertions against the token lifecycle and audit  |
+| Path                           | Contents                                                                                                                               |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `workflow/approval-chain.json` | n8n workflow, importable, 12 nodes                                                                                                     |
+| `sql/approvals.sql`            | Tables, token minting, and consumption                                                                                                 |
+| `sql/audit.sql`                | Append-only decision log. Run approvals.sql first                                                                                      |
+| `tests/approvals-tests.sql`    | Assertions against the token lifecycle and audit                                                                                       |
+| `ci/`                          | CI-only throwaway credentials and scripts that run the workflow end to end against a real n8n, Postgres, and mailpit in GitHub Actions |
 
 Run `approvals.sql` before `audit.sql`: the audit trigger attaches to a table
 `approvals.sql` creates.
+
+## CI
+
+Two jobs run on every push. `approvals` checks the SQL and the token/audit
+assertions, and confirms the workflow JSON parses and still has 12 nodes.
+`workflow-e2e` goes further: it imports `workflow/approval-chain.json` into a
+real n8n 1.123.81 instance (pinned, official Docker image) wired to a real
+Postgres and a real mailpit SMTP catcher, activates it, and drives all three
+webhooks over HTTP. It asserts that submitting a two-stage proposal creates
+the proposal and stage rows and mints exactly one token, that the approver-A
+email arrives with a working link, that visiting the confirmation link (GET)
+never consumes the token, that approving stage 1 writes one audit row and
+mints and emails a second token to approver B, that replaying the stage-1
+token is rejected with no further change, that approving stage 2 brings the
+proposal to its final approved state, and that a rejected single-stage
+proposal sends the rejection notice. Everything is checked against the
+database and mailpit, not against the webhook's own response body.
 
 ## Importing the workflow
 
