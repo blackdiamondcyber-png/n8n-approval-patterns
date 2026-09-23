@@ -71,15 +71,40 @@ echo "== Starting n8n =="
 docker run -d --name n8n-e2e --network host --env-file "$ENV_FILE" "$N8N_IMAGE" start
 
 echo "== Waiting for n8n to become healthy =="
+healthy=false
 for i in $(seq 1 60); do
   code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:5678/healthz" || true)
   if [ "$code" = "200" ]; then
     echo "n8n is healthy after ${i} attempt(s)"
-    exit 0
+    healthy=true
+    break
   fi
   sleep 2
 done
 
-echo "n8n did not become healthy in time"
+if [ "$healthy" != "true" ]; then
+  echo "n8n did not become healthy in time"
+  docker logs n8n-e2e || true
+  exit 1
+fi
+
+# /healthz turns green as soon as the HTTP listener is bound, which is
+# BEFORE ActiveWorkflowManager finishes registering the active workflow's
+# webhooks at boot. A request in that window gets a 404 "is not registered"
+# even though the workflow is active, so poll the real webhook (a harmless
+# no-op proposal with zero stages) until that race is over.
+echo "== Waiting for the workflow's webhooks to finish registering =="
+for i in $(seq 1 30); do
+  resp=$(curl -s -X POST "http://localhost:5678/webhook/proposal/submit" \
+    -H 'Content-Type: application/json' \
+    -d '{"title":"ci-warmup","payload":{},"created_by":"00000000-0000-0000-0000-000000000000","stages":[]}')
+  if ! printf '%s' "$resp" | grep -q "is not registered"; then
+    echo "webhooks are registered after ${i} attempt(s)"
+    exit 0
+  fi
+  sleep 1
+done
+
+echo "the proposal/submit webhook never finished registering"
 docker logs n8n-e2e || true
 exit 1
