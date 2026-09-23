@@ -5,7 +5,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "proposal/submit",
-        "responseMode": "lastNode"
+        "responseMode": "lastNode",
+        "responseData": "noData"
       },
       "name": "Webhook: Proposal Submitted",
       "type": "n8n-nodes-base.webhook",
@@ -70,7 +71,8 @@
       "parameters": {
         "httpMethod": "GET",
         "path": "approve",
-        "responseMode": "lastNode"
+        "responseMode": "lastNode",
+        "responseData": "noData"
       },
       "name": "Webhook: Confirm Page (GET)",
       "type": "n8n-nodes-base.webhook",
@@ -95,7 +97,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "approve/commit",
-        "responseMode": "lastNode"
+        "responseMode": "lastNode",
+        "responseData": "noData"
       },
       "name": "Webhook: Commit Decision (POST)",
       "type": "n8n-nodes-base.webhook",
