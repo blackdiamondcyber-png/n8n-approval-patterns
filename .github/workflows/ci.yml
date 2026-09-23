@@ -1,0 +1,49 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  approvals:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      # ON_ERROR_STOP is the whole point: without it psql prints the raised
+      # exception and still exits 0, so a failing assertion would pass CI.
+      PGPASSWORD: postgres
+      PSQL: psql -v ON_ERROR_STOP=1 -X -q -h localhost -U postgres -d postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load the tables, minting, and audit trigger
+        run: |
+          $PSQL -f sql/approvals.sql
+          $PSQL -f sql/audit.sql
+
+      - name: Run the token and audit assertions
+        run: $PSQL -f tests/approvals-tests.sql
+
+      - name: Validate the n8n workflow file
+        run: |
+          jq empty workflow/approval-chain.json
+          count=$(jq '.nodes | length' workflow/approval-chain.json)
+          echo "workflow node count: $count"
+          if [ "$count" != "12" ]; then
+            echo "expected 12 nodes in workflow/approval-chain.json, found $count"
+            exit 1
+          fi

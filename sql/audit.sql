@@ -1,4 +1,6 @@
 -- Append-only decision log. Never updated, never deleted.
+-- Depends on sql/approvals.sql: run approvals.sql before this file, since
+-- the trigger below attaches to the approval_stages table it creates.
 create table approval_audit (
   id           bigserial primary key,
   proposal_id  uuid not null,

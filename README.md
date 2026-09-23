@@ -1,5 +1,7 @@
 # Tokenized Multi-Stage Approval Workflows
 
+[![tests](https://github.com/blackdiamondcyber-png/n8n-approval-patterns/actions/workflows/ci.yml/badge.svg)](https://github.com/blackdiamondcyber-png/n8n-approval-patterns/actions/workflows/ci.yml)
+
 An n8n pattern for approvals that move through several people who will not log
 into anything. The approver gets an email, clicks one link, and it is done. No
 account, no portal, no password reset at 9pm.
@@ -38,23 +40,27 @@ proposal created
 
 Design decisions that matter:
 
-| Decision | Why |
-|----------|-----|
-| Token is a random 32-byte value, not an id | Not guessable, not enumerable |
-| Token stored hashed | A database read does not hand out working links |
-| GET renders a confirmation page; POST commits | Link scanners cannot approve anything |
-| Single use, consumed on commit | Forwarded emails stop working |
-| Expiry, default 14 days | Stale approvals do not linger |
-| One token per stage | Approver B's link cannot skip stage 1 |
-| Every decision written to an audit row | You can answer "who approved this and when" |
+| Decision                                      | Why                                             |
+| --------------------------------------------- | ----------------------------------------------- |
+| Token is a random 32-byte value, not an id    | Not guessable, not enumerable                   |
+| Token stored hashed                           | A database read does not hand out working links |
+| GET renders a confirmation page; POST commits | Link scanners cannot approve anything           |
+| Single use, consumed on commit                | Forwarded emails stop working                   |
+| Expiry, default 14 days                       | Stale approvals do not linger                   |
+| One token per stage                           | Approver B's link cannot skip stage 1           |
+| Every decision written to an audit row        | You can answer "who approved this and when"     |
 
 ## What is here
 
-| Path | Contents |
-|------|----------|
-| `workflow/approval-chain.json` | n8n workflow, importable |
-| `sql/approvals.sql` | Tables, token minting, and consumption |
-| `sql/audit.sql` | Append-only decision log |
+| Path                           | Contents                                          |
+| ------------------------------ | ------------------------------------------------- |
+| `workflow/approval-chain.json` | n8n workflow, importable, 12 nodes                |
+| `sql/approvals.sql`            | Tables, token minting, and consumption            |
+| `sql/audit.sql`                | Append-only decision log. Run approvals.sql first |
+| `tests/approvals-tests.sql`    | Assertions against the token lifecycle and audit  |
+
+Run `approvals.sql` before `audit.sql`: the audit trigger attaches to a table
+`approvals.sql` creates.
 
 ## Importing the workflow
 
@@ -87,3 +93,5 @@ than daily emails did, and people stopped filtering the sender.
 ## License
 
 MIT.
+
+More of my work: [erik-pearson-portfolio.vercel.app](https://erik-pearson-portfolio.vercel.app). Contact: [LinkedIn](https://www.linkedin.com/in/erikpearson2).
