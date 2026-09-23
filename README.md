@@ -10,6 +10,9 @@ I built this for an internal events system where a proposal had to clear a
 manager and then a regional lead before anything shipped. Chasing approvals
 over email threads was the bottleneck. This removed it.
 
+CI imports the workflow into a pinned n8n (1.123.81) and runs it end to end
+against Postgres 16 and a mail catcher on every push. See [CI](#ci).
+
 ## The problem with the obvious approach
 
 The naive version puts a decision in the URL: `/approve?id=42&decision=yes`.
